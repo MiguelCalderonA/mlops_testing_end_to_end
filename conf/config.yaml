@@ -1,0 +1,51 @@
+# Workspace-agnostic configuration for the MLOps lending project.
+# To run in a different workspace, change ONLY this file (or override via bundle variables).
+
+# Unity Catalog targets
+catalog: <change_me_to_your_catalog>
+schema: credit_fraud
+volume: raw_landing
+
+# Bronze / silver / gold table names (no hardcoded catalogs/schemas anywhere else)
+tables:
+  raw_applications: raw_applications
+  raw_kyc: raw_kyc_identity
+  raw_bureau: raw_credit_bureau
+  raw_transactions: raw_internal_transactions
+  raw_fraud_events: raw_fraud_events
+  raw_outcomes: raw_historical_outcomes
+
+  silver_applications: silver_applications
+  silver_kyc: silver_kyc_identity
+  silver_bureau: silver_credit_bureau
+  silver_transactions: silver_internal_transactions
+  silver_fraud_events: silver_fraud_events
+
+  feature_application: feat_application_attrs
+  feature_customer: feat_customer_behavior
+  feature_bureau: feat_bureau_signals
+
+  training_credit: gold_training_credit
+  training_fraud: gold_training_fraud
+  inference_credit: gold_inference_credit
+  inference_fraud: gold_inference_fraud
+
+# MLflow / model registry
+credit_model_name: credit_risk_model
+fraud_model_name: fraud_detection_model
+# Experiment names are appended to /Users/<current_user>/ by the training notebooks
+# (avoids permission issues with /Shared on locked-down workspaces)
+credit_experiment_name: mlops_lending_credit_risk
+fraud_experiment_name: mlops_lending_fraud_detection
+
+# Mosaic AI Model Serving
+credit_endpoint_name: credit-risk-endpoint
+fraud_endpoint_name: fraud-detection-endpoint
+
+# Monitoring
+monitor_credit_table: gold_inference_credit
+monitor_fraud_table: gold_inference_fraud
+
+# Data generation
+synthetic_rows: 1000
+random_seed: 42

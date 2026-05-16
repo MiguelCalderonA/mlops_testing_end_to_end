@@ -1,0 +1,141 @@
+resources:
+  jobs:
+    mlops_end_to_end_pipeline:
+      name: "[${bundle.target}] MLOps Lending — End to End"
+
+      tags:
+        project: mlops_lending
+        owner: ${workspace.current_user.userName}
+
+      # Run daily, mid-morning UTC
+      schedule:
+        quartz_cron_expression: "0 0 14 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+
+      job_clusters:
+        - job_cluster_key: shared_ml
+          new_cluster:
+            spark_version: ${var.cluster_runtime}
+            node_type_id: ${var.cluster_node_type}
+            num_workers: 1
+            data_security_mode: SINGLE_USER
+
+      tasks:
+        - task_key: bootstrap_uc
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/00_setup/01_bootstrap_unity_catalog.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              volume: ${var.volume}
+
+        - task_key: ingest
+          depends_on: [{ task_key: bootstrap_uc }]
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/01_ingest/01_generate_and_land.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: silver
+          depends_on: [{ task_key: ingest }]
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/02_features/01_build_silver.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: features
+          depends_on: [{ task_key: silver }]
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/02_features/02_feature_engineering.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: train_credit
+          depends_on: [{ task_key: features }]
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/03_train/01_train_credit_risk.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: train_fraud
+          depends_on: [{ task_key: features }]
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/03_train/02_train_fraud_detection.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: validate
+          depends_on:
+            - { task_key: train_credit }
+            - { task_key: train_fraud }
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/04_test/01_validate_and_promote.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: deploy
+          depends_on: [{ task_key: validate }]
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/05_deploy/01_deploy_endpoints.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: smoke_test
+          depends_on: [{ task_key: deploy }]
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/05_deploy/02_smoke_test_endpoints.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: setup_monitor
+          depends_on: [{ task_key: smoke_test }]
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/06_monitor/01_create_monitor.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: drift_check
+          depends_on: [{ task_key: setup_monitor }]
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/06_monitor/02_drift_check_and_alert.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: should_retrain
+          depends_on: [{ task_key: drift_check }]
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.drift_check.values.result}}"
+            right: "retrain_required"
+
+        - task_key: retrain
+          depends_on:
+            - { task_key: should_retrain, outcome: "true" }
+          job_cluster_key: shared_ml
+          notebook_task:
+            notebook_path: ../notebooks/07_retrain/01_trigger_retrain.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}

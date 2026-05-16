@@ -1,0 +1,46 @@
+bundle:
+  name: mlops_lending
+
+# All paths and table names are workspace-agnostic.
+# Variables can be overridden via --var, environment, or per-target.
+variables:
+  catalog:
+    description: Unity Catalog to use (override per target)
+    default: change_me_to_your_catalog
+  schema:
+    description: Schema within the catalog
+    default: credit_fraud
+  volume:
+    description: Volume for synthetic data
+    default: raw_landing
+  cluster_node_type:
+    description: Node type for job clusters
+    default: m6gd.xlarge
+  cluster_runtime:
+    description: DBR ML runtime
+    default: 16.4.x-cpu-ml-scala2.12
+
+include:
+  - resources/*.yml
+
+# Edit the `host:` values below before deploying, or rely on your CLI profile
+# (DATABRICKS_HOST env var also works — but DAB validates that the profile's
+# host matches workspace.host, so the two must agree).
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://change-me-dev.cloud.databricks.com
+    variables:
+      catalog: change_me_dev_catalog
+
+  prod:
+    mode: production
+    workspace:
+      host: https://change-me-prod.cloud.databricks.com
+    variables:
+      catalog: change_me_prod_catalog
+    permissions:
+      - level: CAN_VIEW
+        group_name: users
